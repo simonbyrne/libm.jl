@@ -16,5 +16,6 @@ include("round.jl")
 include("log.jl")
 
 include("pow.jl")
+include("pow1p.jl")
 
 end # module
