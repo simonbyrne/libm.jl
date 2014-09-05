@@ -14,6 +14,7 @@ include("trunc.jl")
 include("round.jl")
 
 include("log.jl")
+include("expm1.jl")
 
 include("pow.jl")
 include("pow1p.jl")
