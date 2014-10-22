@@ -5,6 +5,14 @@ import Base.Math.@horner
 half(x::Float64) = 0.5
 half(x::Float32) = 0.5f0
 
+immutable Double{T} <: FloatingPoint
+    hi::Float64
+    lo::Float64
+end
+
+typealias Double64 Double{Float64}
+
+trunc32(x::Float64) = reinterpret(Float64,reinterpret(Uint64,x) & 0xffff_ffff_0000_0000)
 
 include("frexp.jl")
 include("exponent.jl")

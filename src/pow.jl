@@ -9,12 +9,6 @@
 
 # note: this doesn't handle edge cases or negative numbers correctly.
 
-trunc32(x::Float64) = reinterpret(Float64,reinterpret(Uint64,x) & 0xffff_ffff_0000_0000)
-
-immutable Double64
-    hi::Float64
-    lo::Float64
-end
 function log2_ext(x)
     sig,n = frexp(x)
     ax = 2sig; n -= 1
@@ -58,10 +52,11 @@ function log2_ext(x)
                     2.06975017800338417784e-01) # < 2^-12
     r += s_l*(s_h+ss)
     s2 = s_h*s_h
-    t_h = 3.0 + s2 + r
-    t_h = trunc32(t_h)
-    t_l = r-((t_h-3.0)-s2)
+    # t = @split_add(3.0,s2,r)
+    t_h = trunc32(3.0 + s2 + r)
+    t_l = r+(s2+(3.0-t_h))
     # u+v = ss*(1+...)
+    # p = @split t*s
     u = s_h*t_h
     v = s_l*t_h+t_l*ss
 

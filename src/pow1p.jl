@@ -1,10 +1,12 @@
 
+# this is basically log2_ext with a slightly modified range reduction.
+
 function log21p_ext(x)
     u = 1.0 + x
     sig,n = frexp(u)
     au = 2sig; n -= 1
 
-    # reduce to 
+    # reduce to
     # k = 0, sqrt(3)/2 = 0.866 < au < sqrt(3/2) = 1.22
     # k = 1, sqrt(3/2) = 1.22 < au < sqrt(3) = 1.73
 
@@ -27,37 +29,37 @@ function log21p_ext(x)
     end
 
     # exact 1.0 + x = u + c
-    if x >= 1.0 
+    if x >= 1.0
         # u <= 2x
         c = 1.0-(u-x)
     else
         # 1) x > -0.5: 0.5 <= u <= 2.0
         # 2) x <= -0.5: u = x+1.0 exact, hence so is u-1.0
-        c = x-(u-1.0) 
+        c = x-(u-1.0)
     end
 
-    # x < -0.5: c = 0
+    # x <= -0.5: c = 0
     # x < 0.5: |c| < eps(1.0)
-    # x < 0x1p53: |c| in {-eps(x), 0, eps(x)} 
+    # x < 0x1p53: |c| in {-eps(x), 0, eps(x)}
     # otherwise: c = 1
 
     # scale to au:  1 + x = (au + ac)*2^n
-    ac = ldexp(c,-n) 
+    ac = ldexp(c,-n)
     # log(x) = 2s + 2/3 s^3 + 2/5 s^5...
     f = au - bp # usual f, reduced to -0.28 < u < 0.23
-    f1 = f + ac 
+    f1 = f + ac
     f2 = ac + (f-f1)
     g = au + bp
     g_h = trunc32(g) # according to comment
     g_l = ac + (au + (bp - g_h))
     rg = 1.0/g
 
-    ss = f1*rg # ss = (x-1)/(x+1) or (x-1.5)/(x+1.5) < 0.125 = 2^-3 
+    ss = f1*rg # ss = (x-1)/(x+1) or (x-1.5)/(x+1.5) < 0.125 = 2^-3
     s_h = trunc32(ss)
     s_l = (((f1-s_h*g_h)-s_h*g_l) + f2)*rg # division correction?
 
     z = ss*ss # < 2^-6
-    # log(au) = 2s + 2/3*(s^3 + r) = 2/3s (3 + s^2 + r) 
+    # log(au) = 2s + 2/3*(s^3 + r) = 2/3s (3 + s^2 + r)
     r = z*z*@horner(z,
                     5.99999999999994648725e-01,
                     4.28571428578550184252e-01,
@@ -65,6 +67,8 @@ function log21p_ext(x)
                     2.72728123808534006489e-01,
                     2.30660745775561754067e-01,
                     2.06975017800338417784e-01) # < 2^-12
+    # (s_h + s_l)^2 = s_h^2 + 2 s_l s_h + s_l s_l
+    #   = s_h^2 + s_l (s_h + ss)
     r += s_l*(s_h+ss)
     s2 = s_h*s_h
     t_h = 3.0 + s2 + r
@@ -78,13 +82,13 @@ function log21p_ext(x)
     cp    =  9.61796693925975554329e-01 # /* 0x3FEEC709, 0xDC3A03FD =2/(3ln2) */
     cp_h  =  9.61796700954437255859e-01 # /* 0x3FEEC709, 0xE0000000 =(float)cp */
     cp_l  = -7.02846165095275826516e-09 # /* 0xBE3E2FE0, 0x145B01F5 =tail of cp_h*/
-        
+
     # 2/(3log2)*(ss+...)
     p_h = trunc32(u+v)
     p_l = v-(p_h-u)
-    z_h = cp_h*p_h 
+    z_h = cp_h*p_h
     z_l = cp_l*p_h + p_l*cp + dp_l
-    
+
     t = float64(n)
     t1 = trunc32(((z_h+z_l) + dp_h) + t)
     t2 = z_l - (((t1 - t) - dp_h) - z_h)
