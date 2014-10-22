@@ -21,7 +21,7 @@ macro testsum(name,fn,X)
     end
 end
 
-syslog(x::Float64) = ccall((:log,:libm),Float64,(Float64,),x)
+syslog(x::Float64) = Core.Intrinsics.nan_dom_err(ccall((:log,:libm),Float64,(Float64,),x), x)
 
 @testsum "Openlibm:" log X
 @testsum "System:" syslog X

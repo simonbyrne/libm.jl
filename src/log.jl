@@ -56,7 +56,7 @@ function log(x::Float64)
     elseif x == 0.0
         -Inf
     else
-        NaN
+        throw(DomainError())
     end
 end
         
@@ -106,7 +106,7 @@ function log_fma(x::Float64)
     elseif x == 0.0
         -Inf
     else
-        NaN
+        throw(DomainError())
     end
 end
 
@@ -155,7 +155,7 @@ function log_muladd(x::Float64)
     elseif x == 0.0
         -Inf
     else
-        NaN
+        throw(DomainError())
     end
 end
 
