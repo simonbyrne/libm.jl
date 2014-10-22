@@ -21,7 +21,10 @@ macro testsum(name,fn,X)
     end
 end
 
-@testsum "Reference:" log X
+syslog(x::Float64) = ccall((:log,:libm),Float64,(Float64,),x)
+
+@testsum "Openlibm:" log X
+@testsum "System:" syslog X
 @testsum "Julia:" libm.log X
 @testsum "fma:" libm.log_fma X
 @testsum "muladd:" libm.log_muladd X
