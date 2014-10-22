@@ -37,6 +37,42 @@ function log1p_kernel(k::Int,f::Float64)
     k*ln2_hi+(f-(hfsq-(s*(hfsq+R)+(k*ln2_lo))))
 end
 
+function log1p_kernel_fma(k::Int,f::Float64)
+    ln2_hi = 6.93147180369123816490e-01
+    ln2_lo = 1.90821492927058770002e-10
+
+    hfsq = 0.5*f*f
+    s = f/(2.0+f)
+    z = s*s
+    R = z*@horner_fma(z,
+                6.666666666666735130e-01,
+                3.999999999940941908e-01,
+                2.857142874366239149e-01,
+                2.222219843214978396e-01,
+                1.818357216161805012e-01,
+                1.531383769920937332e-01,
+                1.479819860511658591e-01)
+    k*ln2_hi+(f-(hfsq-(s*(hfsq+R)+(k*ln2_lo))))
+end
+
+function log1p_kernel_muladd(k::Int,f::Float64)
+    ln2_hi = 6.93147180369123816490e-01
+    ln2_lo = 1.90821492927058770002e-10
+
+    hfsq = 0.5*f*f
+    s = f/(2.0+f)
+    z = s*s
+    R = z*@horner_muladd(z,
+                6.666666666666735130e-01,
+                3.999999999940941908e-01,
+                2.857142874366239149e-01,
+                2.222219843214978396e-01,
+                1.818357216161805012e-01,
+                1.531383769920937332e-01,
+                1.479819860511658591e-01)
+    k*ln2_hi+(f-(hfsq-(s*(hfsq+R)+(k*ln2_lo))))
+end
+
 # function
 function log(x::Float64)
     if x > 0.0
@@ -53,3 +89,32 @@ function log(x::Float64)
     end
 end
         
+function log_fma(x::Float64)
+    if x > 0.0
+        if isinf(x) 
+            Inf
+        else
+            k,f = log_red(x)
+            log1p_kernel_fma(k,f)
+        end
+    elseif x == 0.0
+        -Inf
+    else
+        NaN
+    end
+end
+
+function log_muladd(x::Float64)
+    if x > 0.0
+        if isinf(x) 
+            Inf
+        else
+            k,f = log_red(x)
+            log1p_kernel_muladd(k,f)
+        end
+    elseif x == 0.0
+        -Inf
+    else
+        NaN
+    end
+end

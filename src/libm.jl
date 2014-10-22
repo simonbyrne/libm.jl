@@ -2,6 +2,23 @@ module libm
 
 import Base.Math.@horner
 
+macro horner_fma(x, p...)
+    ex = esc(p[end])
+    for i = length(p)-1:-1:1
+        ex = :(fma(t,$ex,$(esc(p[i]))))
+    end
+    Expr(:block, :(t = $(esc(x))), ex)
+end
+
+macro horner_muladd(x, p...)
+    ex = esc(p[end])
+    for i = length(p)-1:-1:1
+        ex = :(muladd(t,$ex,$(esc(p[i]))))
+    end
+    Expr(:block, :(t = $(esc(x))), ex)
+end
+
+
 half(x::Float64) = 0.5
 half(x::Float32) = 0.5f0
 
