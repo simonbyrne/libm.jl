@@ -39,6 +39,7 @@ trunc32(x::Float64) = reinterpret(Float64,reinterpret(Uint64,x) & 0xffff_ffff_00
 # include("round.jl")
 
 include("log.jl")
+# include("log_fma.jl")
 include("log_tang.jl")
 include("expm1.jl")
 

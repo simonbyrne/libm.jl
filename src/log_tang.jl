@@ -14,6 +14,9 @@
 const c_lead = Array(Float64,129)
 const c_trail = Array(Float64,129)
 
+const c_pair = Array((Float64,Float64),129)
+const c_invF = Array(Float64,129)
+
 N=39 # (can be up to N=42, which appears to be what Apple's libm uses).
 sN = 2.0^N
 s7 = 2.0^7
@@ -23,8 +26,11 @@ is7 = 1.0/s7
 for j=0:128
     l_big = Base.log(big(1.0+j*is7))
     l_hi = isN*float64(round(sN*l_big))
+    l_lo = float64(l_big-l_hi)
     c_lead[j+1] = l_hi
-    c_trail[j+1] = float64(l_big-l_hi)
+    c_trail[j+1] = l_lo
+    c_pair[j+1] = (l_hi,l_lo)
+    c_invF[j+1] = 1.0+is7*j
 end
 
 log2_big = Base.log(big(2.0))
@@ -32,14 +38,14 @@ const log2_lead = isN*float64(round(sN*log2_big))
 const log2_trail = float64(log2_big - log2_lead)
 
 
-
-
 function log_tang(x::Float64)
     if x > 0.0
-        isinf(x) && return Inf
+        x == Inf && return x
 
         # Step 2
         if 0x1.e_0fab_fbc7_02a3p-1 < x < 0x1.1_082b_577d_34eep0
+            f = x-1.0
+
             # Procedure 2
             ## Step 1
             g = 1.0/(2.0+f)
@@ -55,8 +61,7 @@ function log_tang(x::Float64)
 
             ## Step 3
             # could improve this with an fma 
-            # e.g. u2 = fma(-u1,f,2(f-u1))*g
-            # or return fma(fma(-u,f,2(f-u)),g,q) ?
+            # return u+muladd(fma(-u,f,2(f-u)),g,q)
             u1 = float64(float32(u)) # round to 24 bits
             f1 = float64(float32(f))
             f2 = f-f1
@@ -67,19 +72,29 @@ function log_tang(x::Float64)
         end
         
         # Step 3
-        m = float(exponent(x))
-        y = ldexp(x,-m) # y ∈ [1,2)
-        F = (y + 0x1p45) - 0x1p45 # is7*round(s7*y)
+        xu = reinterpret(Uint64,x)
+        m = int(xu >> 52) & 0x07ff
+        if m == 0 # x is subnormal
+            x *= 0x1p54 # normalise significand
+            xu = reinterpret(Uint64,x)
+            m = int(xu >> 52) & 0x07ff - 54
+        end
+        m -= 1023
+        y = reinterpret(Float64,(xu & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000)  
+
+        mf = float(m)
+        F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = itrunc(s7*y)-127
-        
+        jp = itrunc(0x1p7*y)-127
+
         # Procedure 1
         ## Step 2
-        l_lead = m*log2_lead + c_lead[jp]
-        l_trail = m*log2_trail + c_trail[jp]
+        @inbounds hi,lo = c_pair[jp]
+        l_lead = mf*log2_lead + hi
+        l_trail = mf*log2_trail + lo
 
         ## Step 3
-        # u = f/F # can tabulate 1/F
+        # @inbounds u = f*c_invF[jp]
         # q = u*u*@horner(u,
         #                 +0x1.0_0000_0000_0001p-1,
         #                 +0x1.5_5555_5550_9ba5p-2,
@@ -88,7 +103,7 @@ function log_tang(x::Float64)
         #                 -0x1.5_5576_6647_2e04p-3)
 
         ## Step 3' (alternative)
-        u = (f+f)/(y+F)
+        u = (2.0f)/(y+F)
         v = u*u
         q = u*v*@horner(v,
                         0x1.5_5555_5555_0286p-4,
@@ -99,6 +114,6 @@ function log_tang(x::Float64)
     elseif x == 0.0
         -Inf
     else
-        NaN
+        throw(DomainError())
     end
 end
