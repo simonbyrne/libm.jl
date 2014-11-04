@@ -86,7 +86,7 @@ function log_tang(x::Float64)
         mf = float(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = itrunc(0x1p7*y)-127
+        jp = itrunc(0x1p7*F)-127
 
         # Procedure 1
         ## Step 2
@@ -96,8 +96,9 @@ function log_tang(x::Float64)
 
         ## Step 3
         # @inbounds u = f*c_invF[jp]
+        # u = f/F
         # q = u*u*@horner(u,
-        #                 +0x1.0_0000_0000_0001p-1,
+        #                 -0x1.0_0000_0000_0001p-1,
         #                 +0x1.5_5555_5550_9ba5p-2,
         #                 -0x1.f_ffff_ffeb_6526p-3,
         #                 +0x1.9_99b4_dfed_6fe4p-3,
