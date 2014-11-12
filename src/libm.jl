@@ -22,7 +22,7 @@ end
 half(x::Float64) = 0.5
 half(x::Float32) = 0.5f0
 
-immutable Double{T} <: FloatingPoint
+immutable Double{T}
     hi::Float64
     lo::Float64
 end
