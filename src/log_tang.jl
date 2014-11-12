@@ -12,7 +12,7 @@
 #  libclc (BSD): modified to use different table size
 #   https://github.com/llvm-mirror/libclc/blob/master/generic/lib/math/log1p.cl
 
-const t_log64 = Array((Float64,Float64),129)
+const t_log_64 = Array((Float64,Float64),129)
 N=39 # (can be up to N=42, which appears to be what Apple's libm uses).
 sN = 2.0^N
 isN = 1.0/sN
@@ -23,11 +23,11 @@ for j=0:128
     l_big = Base.log(big(1.0+j*is7))
     l_hi = isN*float64(round(sN*l_big))
     l_lo = float64(l_big-l_hi)
-    t_log64[j+1] = (l_hi,l_lo)
+    t_log_64[j+1] = (l_hi,l_lo)
     # c_invF[j+1] = 1.0+is7*j
 end
 
-const t_log32 = Array((Float32,Float32),129)
+const t_log_32 = Array((Float32,Float32),129)
 N=16
 sN = 2f0^N
 isN = 1f0/sN
@@ -35,58 +35,13 @@ for j=0:128
     l_big = Base.log(big(1.0+j*is7))
     l_hi = isN*float32(round(sN*l_big))
     l_lo = float32(l_big-l_hi)
-    t_log32[j+1] = (l_hi,l_lo)
-end
-
-# Procedure 2
-@inline function log_proc2(f::Float64)
-    ## Step 1
-    g = 1.0/(2.0+f)
-    u = 2.0*f*g
-    v = u*u
-
-    ## Step 2
-    q = u*v*@horner(v,
-                    0x1.5_5555_5555_54e6p-4,
-                    0x1.9_9999_99ba_c6d4p-7,
-                    0x1.2_4923_07f1_519fp-9,
-                    0x1.c_8034_c85d_fff0p-12)
-
-    ## Step 3
-    # could improve this with an fma
-    # return u+muladd(fma(-u,f,2(f-u)),g,q)
-    u1 = float64(float32(u)) # round to 24 bits
-    f1 = float64(float32(f))
-    f2 = f-f1
-    u2 = ((2.0*(f-u1)-u1*f1)-u1*f2)*g
-
-    ## Step 4
-    u1 + (u2 + q)
-end
-
-@inline function log_proc2(f::Float32)
-    ## Step 1
-    # compute in higher precision
-    u64 = Float64(2f0*f)/(2.0+f)
-    u = Float32(u64)
-    v = u*u
-
-    ## Step 2
-    q = u*v*@horner(v,
-                    Float32(0x1.555552p-4),
-                    Float32(0x1.9a012ap-7))
-
-    ## Step 3
-    # unnecessary, as we have Float64 value
-
-    ## Step 4
-    Float32(u64 + q)
+    t_log_32[j+1] = (l_hi,l_lo)
 end
 
 # Procedure 1
 @inline function log_proc1(y::Float64,mf::Float64,F::Float64,f::Float64,jp::Int)
-    ## Step 2
-    @inbounds hi,lo = libm.t_log64[jp]
+    ## Steps 1 and 2
+    @inbounds hi,lo = libm.t_log_64[jp]
     l_hi = mf* 0x1.62e42fefa4p-1 + hi
     l_lo = mf*-0x1.8432a1b0e2634p-43 + lo
 
@@ -112,9 +67,8 @@ end
 end
 
 @inline function log_proc1(y::Float32,mf::Float32,F::Float32,f::Float32,jp::Int)
-    # Procedure 1
-    ## Step 2
-    @inbounds hi,lo = t_log32[jp]
+    ## Steps 1 and 2
+    @inbounds hi,lo = t_log_32[jp]
     l_hi = mf*Float32(0x1.62e4p-1) + hi
     l_lo = mf*Float32(0x1.7f7d1cp-20) + lo
 
@@ -132,6 +86,51 @@ end
     ## Step 4
     l_hi + (u + (q + l_lo))
 end
+
+# Procedure 2
+@inline function log_proc2(f::Float64)
+    ## Step 1
+    g = 1.0/(2.0+f)
+    u = 2.0*f*g
+    v = u*u
+
+    ## Step 2
+    q = u*v*@horner(v,
+                    0x1.5_5555_5555_54e6p-4,
+                    0x1.9_9999_99ba_c6d4p-7,
+                    0x1.2_4923_07f1_519fp-9,
+                    0x1.c_8034_c85d_fff0p-12)
+
+    ## Step 3
+    # can be improved with an fma, e.g.
+    #   return u+muladd(fma(-u,f,2(f-u)),g,q)
+    u1 = float64(float32(u)) # round to 24 bits
+    f1 = float64(float32(f))
+    f2 = f-f1
+    u2 = ((2.0*(f-u1)-u1*f1)-u1*f2)*g
+
+    ## Step 4
+    u1 + (u2 + q)
+end
+
+@inline function log_proc2(f::Float32)
+    ## Step 1
+    # compute in higher precision
+    u64 = Float64(2f0*f)/(2.0+f)
+    u = Float32(u64)
+    v = u*u
+
+    ## Step 2
+    q = u*v*@horner(v,
+                    Float32(0x1.555552p-4),
+                    Float32(0x1.9a012ap-7))
+
+    ## Step 3: not required
+
+    ## Step 4
+    Float32(u64 + q)
+end
+
 
 
 function log_tang(x::Float64)

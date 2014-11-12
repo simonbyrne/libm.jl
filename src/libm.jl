@@ -41,6 +41,7 @@ trunc32(x::Float64) = reinterpret(Float64,reinterpret(Uint64,x) & 0xffff_ffff_00
 include("log.jl")
 # include("log_fma.jl")
 include("log_tang.jl")
+include("log2_tang.jl")
 include("log_yeppp.jl")
 include("expm1.jl")
 
