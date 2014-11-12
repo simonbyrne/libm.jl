@@ -4,7 +4,7 @@
 #  ACM Trans. Math. Softw. (1990), 16(4):378--400
 #  http://dx.doi.org/10.1145/98267.98294
 
-# implemented in
+# Other implementations:
 #  Apple OS X libm (APSL v2)
 #   http://www.opensource.apple.com/source/Libm/Libm-2026/Source/Intel/xmm_log.c
 #  libacml_mv (GPL v2)
@@ -271,3 +271,6 @@ function log1p_tang(x::Float32)
         throw(DomainError())
     end
 end
+
+@vectorize_1arg Real log_tang
+@vectorize_1arg Real log1p_tang
