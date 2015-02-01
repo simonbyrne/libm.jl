@@ -26,7 +26,8 @@ syslog(x::Float64) = Core.Intrinsics.nan_dom_err(ccall((:log,:libm),Float64,(Flo
 
 @testsum "Openlibm:" log X
 @testsum "System:" syslog X
+# @testsum "simd:" libm.log_simd X
+
 @testsum "Julia fdlibm:" libm.log X
 @testsum "Julia tang:" libm.log_tang X
-# @testsum "fma:" libm.log_fma X
 # @testsum "muladd:" libm.log_muladd X

@@ -12,6 +12,9 @@
 #  libclc (BSD): modified to use different table size
 #   https://github.com/llvm-mirror/libclc/blob/master/generic/lib/math/log1p.cl
 
+
+# At the moment we do not correctly handle floating point flags (inexact, div-by-zero, etc).
+
 const t_log_64 = Array((Float64,Float64),129)
 N=39 # (can be up to N=42, which appears to be what Apple's libm uses).
 sN = 2.0^N
@@ -37,6 +40,18 @@ for j=0:128
     l_lo = float32(l_big-l_hi)
     t_log_32[j+1] = (l_hi,l_lo)
 end
+
+# determine if hardware FMA is available
+# should probably check with LLVM, see #9855.
+const FMA_NATIVE = muladd(nextfloat(1.0),nextfloat(1.0),-nextfloat(1.0,2)) == -4.930380657631324e-32
+
+# truncate to 26 bits
+# ideally, this should be able to use ANDPD instructions, see #9868.
+function truncbits(x::Float64)
+    reinterpret(Float64, reinterpret(UInt64,x) & 0xffff_ffff_f800_0000)
+end
+
+
 
 # Procedure 1
 @inline function log_proc1(y::Float64,mf::Float64,F::Float64,f::Float64,jp::Int)
@@ -66,6 +81,39 @@ end
     l_hi + (u + (q + l_lo))
 end
 
+# Procedure 2
+@inline function log_proc2(f::Float64)
+    ## Step 1
+    g = 1.0/(2.0+f)
+    u = 2.0*f*g
+    v = u*u
+
+    ## Step 2
+    q = u*v*@horner(v,
+                    0x1.5_5555_5555_54e6p-4,
+                    0x1.9_9999_99ba_c6d4p-7,
+                    0x1.2_4923_07f1_519fp-9,
+                    0x1.c_8034_c85d_fff0p-12)
+
+    ## Step 3
+    # based on:
+    #   2(f-u) = 2(f(2+f)-2f)/(2+f) = 2f^2/(2+f) = fu
+    #   2(f-u1-u2) - f*(u1+u2) = 0
+    #   2(f-u1) - f*u1 = (2+f)u2
+    #   u2 = (2(f-u1) - f*u1)/(2+f)
+    if FMA_NATIVE
+        return u + muladd(fma(-u,f,2(f-u)), g, q)
+    else
+        u1 = truncbits(u) # round to 24 bits
+        f1 = truncbits(f)
+        f2 = f-f1
+        u2 = ((2.0*(f-u1)-u1*f1)-u1*f2)*g
+        ## Step 4
+        return u1 + (u2 + q)
+    end
+end
+
+
 @inline function log_proc1(y::Float32,mf::Float32,F::Float32,f::Float32,jp::Int)
     ## Steps 1 and 2
     @inbounds hi,lo = t_log_32[jp]
@@ -85,32 +133,6 @@ end
 
     ## Step 4
     l_hi + (u + (q + l_lo))
-end
-
-# Procedure 2
-@inline function log_proc2(f::Float64)
-    ## Step 1
-    g = 1.0/(2.0+f)
-    u = 2.0*f*g
-    v = u*u
-
-    ## Step 2
-    q = u*v*@horner(v,
-                    0x1.5_5555_5555_54e6p-4,
-                    0x1.9_9999_99ba_c6d4p-7,
-                    0x1.2_4923_07f1_519fp-9,
-                    0x1.c_8034_c85d_fff0p-12)
-
-    ## Step 3
-    # can be improved with an fma, e.g.
-    #   return u+muladd(fma(-u,f,2(f-u)),g,q)
-    u1 = float64(float32(u)) # round to 24 bits
-    f1 = float64(float32(f))
-    f2 = f-f1
-    u2 = ((2.0*(f-u1)-u1*f1)-u1*f2)*g
-
-    ## Step 4
-    u1 + (u2 + q)
 end
 
 @inline function log_proc2(f::Float32)
@@ -144,11 +166,11 @@ function log_tang(x::Float64)
         end
 
         # Step 3
-        xu = reinterpret(Uint64,x)
+        xu = reinterpret(UInt64,x)
         m = int(xu >> 52) & 0x07ff
         if m == 0 # x is subnormal
             x *= 0x1p54 # normalise significand
-            xu = reinterpret(Uint64,x)
+            xu = reinterpret(UInt64,x)
             m = int(xu >> 52) & 0x07ff - 54
         end
         m -= 1023
@@ -157,7 +179,7 @@ function log_tang(x::Float64)
         mf = Float64(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = itrunc(0x1p7*F)-127
+        jp = trunc(Int,0x1p7*F)-127
 
         return log_proc1(y,mf,F,f,jp)
     elseif x == 0.0
@@ -180,11 +202,11 @@ function log_tang(x::Float32)
         end
 
         # Step 3
-        xu = reinterpret(Uint32,x)
+        xu = reinterpret(UInt32,x)
         m = int(xu >> 23) & 0x00ff
         if m == 0 # x is subnormal
             x *= Float32(0x1p25) # normalise significand
-            xu = reinterpret(Uint32,x)
+            xu = reinterpret(UInt32,x)
             m = int(xu >> 23) & 0x00ff - 25
         end
         m -= 127
@@ -193,7 +215,7 @@ function log_tang(x::Float32)
         mf = Float32(m)
         F = (y + Float32(0x1p16)) - Float32(0x1p16) # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = itrunc(Float32(0x1p7)*F)-127
+        jp = trunc(Int,Float32(0x1p7)*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == 0f0
@@ -209,7 +231,7 @@ function log1p_tang(x::Float64)
     if x > -1.0
         x == Inf && return x
         if -0x1p-53 < x < 0x1p-53
-            return x # Inexact
+            return x
 
         # Step 2
         elseif -0x1.f_0540_438f_d5c4p-5 < x < 0x1.0_82b5_77d3_4ed8p-4
@@ -218,15 +240,15 @@ function log1p_tang(x::Float64)
 
         # Step 3
         z = 1.0 + x
-        zu = reinterpret(Uint64,z)
+        zu = reinterpret(UInt64,z)
         m = int(zu >> 52) & 0x07ff - 1023 # z cannot be subnormal
-        c = m > 0 ? 1.0-(z-x) : x-(z-1.0) # 1+x = z+c
+        c = m > 0 ? 1.0-(z-x) : x-(z-1.0) # 1+x = z+c exactly
         y = reinterpret(Float64,(zu & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000)
 
         mf = Float64(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
-        jp = itrunc(0x1p7*F)-127
+        jp = trunc(Int,0x1p7*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == -1.0
@@ -251,7 +273,7 @@ function log1p_tang(x::Float32)
 
         # Step 3
         z = 1f0 + x
-        zu = reinterpret(Uint32,z)
+        zu = reinterpret(UInt32,z)
         m = int(zu >> 23) & 0x00ff - 127 # z cannot be subnormal
         c = m > 0 ? 1f0-(z-x) : x-(z-1f0) # 1+x = z+c
         y = reinterpret(Float32,(xu & 0x007f_ffff) | 0x3f80_0000)
@@ -259,7 +281,7 @@ function log1p_tang(x::Float32)
         mf = Float32(m)
         F = (y + Float32(0x1p16)) - Float32(0x1p16) # 0x1p-7*round(0x1p7*y)
         f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
-        jp = itrunc(Float32(0x1p7)*F)-127
+        jp = trunc(Int,Float32(0x1p7)*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == -1f0
@@ -273,3 +295,4 @@ end
 
 @vectorize_1arg Real log_tang
 @vectorize_1arg Real log1p_tang
+
