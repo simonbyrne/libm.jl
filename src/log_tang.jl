@@ -15,6 +15,9 @@
 
 # At the moment we do not correctly handle floating point flags (inexact, div-by-zero, etc).
 
+import Base.unsafe_trunc
+
+
 const t_log_64 = Array((Float64,Float64),129)
 N=39 # (can be up to N=42, which appears to be what Apple's libm uses).
 sN = 2.0^N
@@ -45,12 +48,11 @@ end
 # should probably check with LLVM, see #9855.
 const FMA_NATIVE = muladd(nextfloat(1.0),nextfloat(1.0),-nextfloat(1.0,2)) == -4.930380657631324e-32
 
-# truncate to 26 bits
+# truncate lower order bits (up to 26)
 # ideally, this should be able to use ANDPD instructions, see #9868.
 function truncbits(x::Float64)
     reinterpret(Float64, reinterpret(UInt64,x) & 0xffff_ffff_f800_0000)
 end
-
 
 
 # Procedure 1
@@ -102,7 +104,7 @@ end
     #   2(f-u1) - f*u1 = (2+f)u2
     #   u2 = (2(f-u1) - f*u1)/(2+f)
     if FMA_NATIVE
-        return u + muladd(fma(-u,f,2(f-u)), g, q)
+        return u + fma(fma(-u,f,2(f-u)), g, q)
     else
         u1 = truncbits(u) # round to 24 bits
         f1 = truncbits(f)
@@ -179,7 +181,7 @@ function log_tang(x::Float64)
         mf = Float64(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = trunc(Int,0x1p7*F)-127
+        jp = unsafe_trunc(Int,0x1p7*F)-127
 
         return log_proc1(y,mf,F,f,jp)
     elseif x == 0.0
@@ -215,7 +217,7 @@ function log_tang(x::Float32)
         mf = Float32(m)
         F = (y + Float32(0x1p16)) - Float32(0x1p16) # 0x1p-7*round(0x1p7*y)
         f = y-F
-        jp = trunc(Int,Float32(0x1p7)*F)-127
+        jp = unsafe_trunc(Int,Float32(0x1p7)*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == 0f0
@@ -248,7 +250,7 @@ function log1p_tang(x::Float64)
         mf = Float64(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
         f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
-        jp = trunc(Int,0x1p7*F)-127
+        jp = unsafe_trunc(Int,0x1p7*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == -1.0
@@ -281,7 +283,7 @@ function log1p_tang(x::Float32)
         mf = Float32(m)
         F = (y + Float32(0x1p16)) - Float32(0x1p16) # 0x1p-7*round(0x1p7*y)
         f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
-        jp = trunc(Int,Float32(0x1p7)*F)-127
+        jp = unsafe_trunc(Int,Float32(0x1p7)*F)-127
 
         log_proc1(y,mf,F,f,jp)
     elseif x == -1f0
