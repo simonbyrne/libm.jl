@@ -44,13 +44,22 @@ for j=0:128
     t_log_32[j+1] = (l_hi,l_lo)
 end
 
+const tt_log_32 = Array(Float64,129)
+N=16
+sN = 2f0^N
+isN = 1f0/sN
+for j=0:128
+    tt_log_32[j+1] = float64(Base.log(big(1.0+j*is7)))
+end
+
+
 # determine if hardware FMA is available
 # should probably check with LLVM, see #9855.
 const FMA_NATIVE = muladd(nextfloat(1.0),nextfloat(1.0),-nextfloat(1.0,2)) == -4.930380657631324e-32
 
 # truncate lower order bits (up to 26)
 # ideally, this should be able to use ANDPD instructions, see #9868.
-function truncbits(x::Float64)
+@inline function truncbits(x::Float64)
     reinterpret(Float64, reinterpret(UInt64,x) & 0xffff_ffff_f800_0000)
 end
 
@@ -118,9 +127,8 @@ end
 
 @inline function log_proc1(y::Float32,mf::Float32,F::Float32,f::Float32,jp::Int)
     ## Steps 1 and 2
-    @inbounds hi,lo = t_log_32[jp]
-    l_hi = mf*Float32(0x1.62e4p-1) + hi
-    l_lo = mf*Float32(0x1.7f7d1cp-20) + lo
+    @inbounds hi = tt_log_32[jp]
+    l = mf*0.6931471805599453 + hi
 
     ## Step 3
     # @inbounds u = f*c_invF[jp]
@@ -134,7 +142,7 @@ end
     q = u*v*Float32(0x1.555584p-4)
 
     ## Step 4
-    l_hi + (u + (q + l_lo))
+    float32(l + (u + q))
 end
 
 @inline function log_proc2(f::Float32)
@@ -243,13 +251,14 @@ function log1p_tang(x::Float64)
         # Step 3
         z = 1.0 + x
         zu = reinterpret(UInt64,z)
+        s = reinterpret(Float64,0x7fe0_0000_0000_0000 - (zu & 0xfff0_0000_0000_0000)) # 2^-m
         m = int(zu >> 52) & 0x07ff - 1023 # z cannot be subnormal
         c = m > 0 ? 1.0-(z-x) : x-(z-1.0) # 1+x = z+c exactly
         y = reinterpret(Float64,(zu & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000)
 
         mf = Float64(m)
         F = (y + 0x1p45) - 0x1p45 # 0x1p-7*round(0x1p7*y)
-        f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
+        f = (y - F) + c*s #2^m(F+f) = 1+x = z+c
         jp = unsafe_trunc(Int,0x1p7*F)-127
 
         log_proc1(y,mf,F,f,jp)
@@ -276,13 +285,14 @@ function log1p_tang(x::Float32)
         # Step 3
         z = 1f0 + x
         zu = reinterpret(UInt32,z)
+        s = reinterpret(Float32,0x7f000000 - (zu & 0xff80_0000)) # 2^-m
         m = int(zu >> 23) & 0x00ff - 127 # z cannot be subnormal
         c = m > 0 ? 1f0-(z-x) : x-(z-1f0) # 1+x = z+c
-        y = reinterpret(Float32,(xu & 0x007f_ffff) | 0x3f80_0000)
+        y = reinterpret(Float32,(zu & 0x007f_ffff) | 0x3f80_0000)
 
         mf = Float32(m)
         F = (y + Float32(0x1p16)) - Float32(0x1p16) # 0x1p-7*round(0x1p7*y)
-        f = (y - F) + ldexp(c,-m) #2^m(F+f) = 1+x = z+c
+        f = (y - F) + s*c #2^m(F+f) = 1+x = z+c
         jp = unsafe_trunc(Int,Float32(0x1p7)*F)-127
 
         log_proc1(y,mf,F,f,jp)

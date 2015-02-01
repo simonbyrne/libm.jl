@@ -6,8 +6,8 @@ X = exp(randn(N))
 function maxerr{T}(X::AbstractArray{T})
     e = 0.0
     for x in X
-        a = libm.log_tang(x)
-        b = log(big(x))
+        a = libm.log1p_tang(x)
+        b = log1p(big(x))
         d = abs(T(b-a))
         r = d / eps(T(b))
         e = max(e,r)

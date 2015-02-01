@@ -23,11 +23,26 @@ macro testsum(name,fn,X)
 end
 
 syslog(x::Float64) = Core.Intrinsics.nan_dom_err(ccall((:log,:libm),Float64,(Float64,),x), x)
+syslog(x::Float32) = Core.Intrinsics.nan_dom_err(ccall((:logf,:libm),Float32,(Float32,),x), x)
 
+# println("Float64")
+# println("-------------------")
+# @testsum "Openlibm:" log X
+# @testsum "System:" syslog X
+
+# @testsum "Julia fdlibm:" libm.log X
+# @testsum "Julia tang:" libm.log_tang X
+# # @testsum "muladd:" libm.log_muladd X
+
+# println()
+# println()
+
+X = float32(X)
+
+println("Float32")
+println("-------------------")
 @testsum "Openlibm:" log X
 @testsum "System:" syslog X
-# @testsum "simd:" libm.log_simd X
 
-@testsum "Julia fdlibm:" libm.log X
+#@testsum "Julia fdlibm:" libm.log X
 @testsum "Julia tang:" libm.log_tang X
-# @testsum "muladd:" libm.log_muladd X
